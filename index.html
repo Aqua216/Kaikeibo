@@ -166,6 +166,15 @@ footer{margin-top:42px;padding:16px 6px 0;border-top:1px solid var(--stroke);fon
 .btn.ghost{background:var(--glass);color:var(--txt-dim)}
 .btn.danger{background:rgba(255,90,90,.14);color:#ff9a9a;border-color:rgba(255,90,90,.3);flex:0 0 auto;padding:14px 18px}
 
+.impdlg{position:fixed;left:50%;top:50%;z-index:51;width:min(420px,calc(100% - 36px));
+  transform:translate(-50%,-46%) scale(.96);border-radius:24px;padding:22px 22px calc(20px + env(safe-area-inset-bottom));
+  opacity:0;pointer-events:none;transition:.32s cubic-bezier(.3,.85,.3,1)}
+.impdlg.on{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
+.impdlg h3{font-size:18px;font-weight:700;margin-bottom:12px}
+.impdlg p{font-size:14px;color:var(--txt-dim);line-height:1.7;margin-bottom:20px;white-space:pre-line}
+.imp-actions{display:flex;flex-direction:column;gap:10px}
+.imp-actions .btn{flex:1;width:100%}
+
 .toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translate(-50%,20px);z-index:60;
   padding:11px 20px;border-radius:14px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:.3s;white-space:nowrap;max-width:90vw;text-align:center}
 .toast.on{opacity:1;transform:translate(-50%,0)}
@@ -264,6 +273,17 @@ footer{margin-top:42px;padding:16px 6px 0;border-top:1px solid var(--stroke);fon
     <button class="btn danger" id="delBtn" style="display:none">削除</button>
     <button class="btn ghost" id="cancelBtn">キャンセル</button>
     <button class="btn primary" id="saveBtn">保存</button>
+  </div>
+</div>
+
+<div class="scrim" id="impScrim"></div>
+<div class="impdlg glass" id="impDlg">
+  <h3 id="impTitle">.mdの読み込み</h3>
+  <p id="impMsg"></p>
+  <div class="imp-actions">
+    <button class="btn primary" id="impAppend">追記する</button>
+    <button class="btn danger" id="impReplace">全置き換え</button>
+    <button class="btn ghost" id="impCancel">キャンセル</button>
   </div>
 </div>
 
@@ -416,7 +436,9 @@ function openSheet(id){
   document.getElementById("delBtn").style.display=id?"":"none";
   if(id){const r=DATA.find(x=>x.id===id);setType(r.type);document.getElementById("fDate").value=r.date;
     document.getElementById("fAmt").value=r.amt;document.getElementById("fStore").value=r.store;
-    document.getElementById("fCat").value=r.cat;document.getElementById("fMeans").value=r.means;}
+    const fc=document.getElementById("fCat");
+    if(![...fc.options].some(o=>o.value===r.cat)){const o=document.createElement("option");o.value=r.cat;o.textContent=r.cat;fc.appendChild(o);}
+    fc.value=r.cat;document.getElementById("fMeans").value=r.means;}
   else{setType("支出");document.getElementById("fDate").value=new Date().toISOString().slice(0,10);
     document.getElementById("fAmt").value="";document.getElementById("fStore").value="";document.getElementById("fMeans").value="カード";}
   scrim.classList.add("on");sheet.classList.add("on");
@@ -469,7 +491,8 @@ function buildMD(){
 |--|--|--|--|--|--|
 `;
   const sorted=DATA.slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
-  return head+sorted.map(r=>`|${r.date}|${r.type}|${r.store}|${r.cat}|${r.amt.toLocaleString("en-US")}|${r.means}|`).join("\n")+"\n";
+  const sm=s=>String(s).replace(/\|/g,"｜");
+  return head+sorted.map(r=>`|${r.date}|${r.type}|${sm(r.store)}|${sm(r.cat)}|${r.amt.toLocaleString("en-US")}|${sm(r.means)}|`).join("\n")+"\n";
 }
 function exportMD(){
   const blob=new Blob([buildMD()],{type:"text/markdown"});const url=URL.createObjectURL(blob);
@@ -479,11 +502,14 @@ function exportMD(){
 function parseMD(text){
   const out=[];text.split(/\r?\n/).forEach(line=>{line=line.trim();if(!line.startsWith("|2"))return;
     const p=line.replace(/^\|/,"").replace(/\|$/,"").split("|").map(s=>s.trim());
-    if(p.length<6)return;const[d,t,store,cat,amt,means]=p;
+    if(p.length!==6)return;const[d,t,store,cat,amt,means]=p;
     if(!/^\d{4}-\d{2}-\d{2}$/.test(d))return;
-    out.push({date:d,type:t,store,cat,amt:parseInt(amt.replace(/,/g,""),10),means});});return out;
+    if(t!=="支出"&&t!=="収入")return;
+    const n=parseInt(amt.replace(/,/g,""),10);
+    if(isNaN(n))return;
+    out.push({date:d,type:t,store,cat,amt:n,means});});return out;
 }
-const sig=r=>`${r.date}|${r.type}|${r.store}|${r.amt}`;
+const sig=r=>`${r.date}|${r.type}|${r.store}|${r.cat}|${r.amt}`;
 function importMD(file){
   const r=new FileReader();
   r.onload=()=>{const rows=parseMD(r.result);
@@ -491,14 +517,39 @@ function importMD(file){
     const existing=new Set(DATA.map(sig));
     const fresh=rows.filter(x=>!existing.has(sig(x)));
     const dup=rows.length-fresh.length;
-    let msg=`${rows.length}件中、新規${fresh.length}件`;
-    if(dup>0)msg+=`（重複${dup}件はスキップ）`;
-    msg+="を追記します。よろしいですか？\n\n［キャンセル］→ 現在のデータを全て置き換え";
-    const append=confirm(msg);
-    if(append){if(!fresh.length){toast("新規データはありませんでした");return;}fresh.forEach(x=>DATA.push({...x,id:uid()}));toast(fresh.length+"件を追記しました");}
-    else{DATA=rows.map(x=>({...x,id:uid()}));toast(rows.length+"件で置き換えました");}
-    save();state.month=null;update();};
+    let msg=`${rows.length}件の取引を読み込みました。\nうち新規 ${fresh.length}件`;
+    if(dup>0)msg+=`（重複 ${dup}件）`;
+    msg+="\n\n「追記する」で新規分を既存データに追加します。\n「全置き換え」で現在のデータを破棄し読み込んだ内容に入れ替えます。";
+    openImport(msg,rows,fresh);
+  };
   r.onerror=()=>toast("読み込みに失敗しました");r.readAsText(file);
+}
+let pendingImport=null;
+function openImport(msg,rows,fresh){
+  pendingImport={rows,fresh};
+  document.getElementById("impMsg").textContent=msg;
+  document.getElementById("impScrim").classList.add("on");
+  document.getElementById("impDlg").classList.add("on");
+}
+function closeImport(){
+  document.getElementById("impScrim").classList.remove("on");
+  document.getElementById("impDlg").classList.remove("on");
+  pendingImport=null;
+}
+function doImportAppend(){
+  if(!pendingImport)return;
+  const {fresh}=pendingImport;
+  if(!fresh.length){toast("新規データはありませんでした");closeImport();return;}
+  fresh.forEach(x=>DATA.push({...x,id:uid()}));
+  toast(fresh.length+"件を追記しました");
+  save();state.month=null;update();closeImport();
+}
+function doImportReplace(){
+  if(!pendingImport)return;
+  const {rows}=pendingImport;
+  DATA=rows.map(x=>({...x,id:uid()}));
+  toast(rows.length+"件で置き換えました");
+  save();state.month=null;update();closeImport();
 }
 
 let toastT;function toast(msg){const el=document.getElementById("toast");el.textContent=msg;el.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove("on"),2200);}
@@ -523,6 +574,10 @@ document.getElementById("fileInput").addEventListener("change",e=>{if(e.target.f
 document.getElementById("selBtn").addEventListener("click",()=>setSelMode(!selMode));
 document.getElementById("bulkClose").addEventListener("click",()=>setSelMode(false));
 document.getElementById("bulkApply").addEventListener("click",applyBulk);
+document.getElementById("impAppend").addEventListener("click",doImportAppend);
+document.getElementById("impReplace").addEventListener("click",doImportReplace);
+document.getElementById("impCancel").addEventListener("click",closeImport);
+document.getElementById("impScrim").addEventListener("click",closeImport);
 
 update();
 </script>
