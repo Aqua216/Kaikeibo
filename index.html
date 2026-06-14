@@ -1021,7 +1021,7 @@ function buildMD(){
 }
 function exportMD(){
   const blob=new Blob([buildMD()],{type:"text/markdown"});const url=URL.createObjectURL(blob);
-  const stamp=new Date().toISOString().slice(0,10);
+  const _d=new Date();const stamp=`${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,"0")}-${String(_d.getDate()).padStart(2,"0")}`;
   const a=document.createElement("a");a.href=url;a.download=`CashFile-${stamp}.md`;document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);toast(".mdを書き出しました");
   try{localStorage.setItem(BKKEY,String(Date.now()));}catch(e){}
@@ -1425,6 +1425,7 @@ window.addEventListener("orientationchange",()=>setTimeout(()=>{setTrack(TAB_ORD
 
 /* バックアップ保全：データがあるのに長期間.md書き出しをしていなければ、起動時に一度だけ促す */
 (function checkBackupReminder(){
+  return; // 起動時のバックアップ促し通知は無効化
   if(!DATA.length)return; // データが無ければ不要
   const SNOOZE="cashfile_backup_snooze_v1";
   let last=0,snooze=0;
