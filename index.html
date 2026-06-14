@@ -458,7 +458,6 @@ footer{margin-top:42px;padding:16px 6px 0;border-top:1px solid var(--stroke);fon
 <script>
 const SEED = [];
 const KEY = "zaimu_ledger_dist_v1";
-const BKKEY = "cashfile_last_export_v1";
 const CATS_EXP = ["食費","日用品","外食・交際費","交通","住居","通信","医療・健康","衣服・美容","趣味・娯楽","教育","投資","その他"];
 const CATS_INC = ["給与","賞与","副業","その他"];
 const COLORS={"食費":"#7be0a3","外食・交際費":"#ff8a6b","趣味・娯楽":"#c08af0","日用品":"#6cb6ff","交通":"#ffd166","住居":"#a8b0c0","通信":"#5ad0e0","医療・健康":"#ff7aa8","衣服・美容":"#ffae6b","教育":"#7be0d0","投資":"#9ae66e","その他":"#b8b0a0","給与":"#9ae66e","賞与":"#7be0d0","副業":"#6cb6ff"};
@@ -1024,7 +1023,6 @@ function exportMD(){
   const _d=new Date();const stamp=`${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,"0")}-${String(_d.getDate()).padStart(2,"0")}`;
   const a=document.createElement("a");a.href=url;a.download=`CashFile-${stamp}.md`;document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);toast(".mdを書き出しました");
-  try{localStorage.setItem(BKKEY,String(Date.now()));}catch(e){}
 }
 function parseMD(text){
   const out=[];text.split(/\r?\n/).forEach(line=>{line=line.trim();if(!line.startsWith("|2"))return;
@@ -1422,30 +1420,6 @@ update();
 requestAnimationFrame(()=>{setTrack(TAB_ORDER.indexOf(state.tab),false);positionTabPill(TAB_ORDER.indexOf(state.tab),false);syncSegPills(false);fitViewport(false);});
 window.addEventListener("resize",()=>{setTrack(TAB_ORDER.indexOf(state.tab),false);positionTabPill(TAB_ORDER.indexOf(state.tab),false);syncSegPills(false);fitViewport(false);});
 window.addEventListener("orientationchange",()=>setTimeout(()=>{setTrack(TAB_ORDER.indexOf(state.tab),false);positionTabPill(TAB_ORDER.indexOf(state.tab),false);syncSegPills(false);fitViewport(false);},200));
-
-/* バックアップ保全：データがあるのに長期間.md書き出しをしていなければ、起動時に一度だけ促す */
-(function checkBackupReminder(){
-  return; // 起動時のバックアップ促し通知は無効化
-  if(!DATA.length)return; // データが無ければ不要
-  const SNOOZE="cashfile_backup_snooze_v1";
-  let last=0,snooze=0;
-  try{last=parseInt(localStorage.getItem(BKKEY)||"0",10)||0;}catch(e){}
-  try{snooze=parseInt(localStorage.getItem(SNOOZE)||"0",10)||0;}catch(e){}
-  const ms=7*86400000, now=Date.now();
-  if(last&&now-last<ms)return;          // 直近に書き出し済みなら不要
-  if(snooze&&now-snooze<86400000)return; // 一度促したら24時間は再通知しない
-  setTimeout(()=>{
-    try{localStorage.setItem(SNOOZE,String(now));}catch(e){}
-    confirmDialog({
-      title:"バックアップのおすすめ",
-      message:last
-        ? "前回の書き出しから1週間以上経過しています。データは端末内のみに保存されているため、.mdへの書き出しをおすすめします。"
-        : "データはこの端末内にのみ保存されています。万一に備えて、.mdファイルへ書き出してバックアップしておくと安心です。",
-      okLabel:"今すぐ書き出す",
-      onOk:()=>exportMD()
-    });
-  },1400);
-})();
 
 /* iOS Safariはviewportのuser-scalable=noを無視するため、JSでズームを抑止する。
    通常のスクロール・スワイプ・操作には影響しないよう、拡大ジェスチャーのみを止める。 */
