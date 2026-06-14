@@ -392,7 +392,7 @@ footer{margin-top:42px;padding:16px 6px 0;border-top:1px solid var(--stroke);fon
   </div>
   <div class="row2">
     <div class="field"><label>日付</label><input type="date" id="fDate"></div>
-    <div class="field"><label>金額</label><input type="number" id="fAmt" inputmode="numeric" placeholder="0"></div>
+    <div class="field"><label>金額</label><input type="text" id="fAmt" inputmode="decimal" placeholder="0"></div>
   </div>
   <div class="field"><label>店舗・内容</label><input type="text" id="fStore" placeholder="例：セブンイレブン"></div>
   <div class="row2">
@@ -417,11 +417,22 @@ footer{margin-top:42px;padding:16px 6px 0;border-top:1px solid var(--stroke);fon
   </div>
 </div>
 
+<div class="scrim" id="cfScrim"></div>
+<div class="impdlg glass" id="cfDlg" role="dialog" aria-modal="true" aria-labelledby="cfTitle">
+  <h3 id="cfTitle">確認</h3>
+  <p id="cfMsg"></p>
+  <div class="imp-actions">
+    <button class="btn danger" id="cfOk" style="width:100%">削除する</button>
+    <button class="btn ghost" id="cfCancel">キャンセル</button>
+  </div>
+</div>
+
 <div class="toast glass" id="toast"></div>
 
 <script>
 const SEED = [];
 const KEY = "zaimu_ledger_dist_v1";
+const BKKEY = "cashfile_last_export_v1";
 const CATS_EXP = ["食費","日用品","外食・交際費","交通","住居","通信","医療・健康","衣服・美容","趣味・娯楽","教育","投資","その他"];
 const CATS_INC = ["給与","賞与","副業","その他"];
 const COLORS={"食費":"#7be0a3","外食・交際費":"#ff8a6b","趣味・娯楽":"#c08af0","日用品":"#6cb6ff","交通":"#ffd166","住居":"#a8b0c0","通信":"#5ad0e0","医療・健康":"#ff7aa8","衣服・美容":"#ffae6b","教育":"#7be0d0","投資":"#9ae66e","その他":"#b8b0a0","給与":"#9ae66e","賞与":"#7be0d0","副業":"#6cb6ff"};
@@ -867,19 +878,40 @@ function openSheet(id){
   trapFocus(sheet,closeSheet);
 }
 function closeSheet(){scrim.classList.remove("on");sheet.classList.remove("on");editId=null;releaseFocus();}
+function parseAmount(raw){
+  if(raw==null)return NaN;
+  // 全角数字・カンマ・空白を正規化してから数値化
+  let s=String(raw).trim()
+    .replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
+    .replace(/[，､、]/g,"").replace(/,/g,"").replace(/\s/g,"")
+    .replace(/[ー－―]/g,"-").replace(/円|¥|￥/g,"");
+  if(s==="")return NaN;
+  const n=Number(s);
+  return Number.isFinite(n)?n:NaN;
+}
 function saveTxn(){
   const date=document.getElementById("fDate").value;
-  const amt=parseInt(document.getElementById("fAmt").value,10);
+  const amt=parseAmount(document.getElementById("fAmt").value);
   const store=document.getElementById("fStore").value.trim();
   const cat=document.getElementById("fCat").value;const means=document.getElementById("fMeans").value;
   if(!date){toast("日付を入力してください");return;}
-  if(isNaN(amt)){toast("金額を入力してください");return;}
+  if(isNaN(amt)){toast("金額を数字で入力してください");return;}
+  if(amt===0){toast("金額に0は入力できません");return;}
   if(!store){toast("店舗・内容を入力してください");return;}
   if(editId){const r=DATA.find(x=>x.id===editId);Object.assign(r,{date,type:formType,store,cat,amt,means});r.id=stableId({date,type:formType,store,cat,amt,means},DATA.filter(x=>x!==r));toast("更新しました");}
   else{const rec={date,type:formType,store,cat,amt,means};rec.id=stableId(rec,DATA);DATA.push(rec);toast("追加しました");state.month=date.slice(0,7);state.mode="month";document.querySelectorAll("#modeSeg button").forEach(b=>b.classList.toggle("on",b.dataset.mode==="month"));}
   save();closeSheet();update();
 }
-function delTxn(){if(!editId)return;if(!confirm("この取引を削除しますか？"))return;DATA=DATA.filter(x=>x.id!==editId);save();closeSheet();toast("削除しました");update();}
+function delTxn(){
+  if(!editId)return;
+  const id=editId;
+  confirmDialog({
+    title:"取引を削除",
+    message:"この取引を削除します。元に戻せません。",
+    okLabel:"削除する",
+    onOk:()=>{DATA=DATA.filter(x=>x.id!==id);save();closeSheet();toast("削除しました");update();}
+  });
+}
 
 /* export / import with append + dedupe */
 function buildMD(){
@@ -924,6 +956,7 @@ function exportMD(){
   const stamp=new Date().toISOString().slice(0,10);
   const a=document.createElement("a");a.href=url;a.download=`CashFile-${stamp}.md`;document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);toast(".mdを書き出しました");
+  try{localStorage.setItem(BKKEY,String(Date.now()));}catch(e){}
 }
 function parseMD(text){
   const out=[];text.split(/\r?\n/).forEach(line=>{line=line.trim();if(!line.startsWith("|2"))return;
@@ -964,6 +997,28 @@ function closeImport(){
   pendingImport=null;
   releaseFocus();
 }
+/* 汎用確認ダイアログ（OS標準のconfirmに代わるアプリ内ダイアログ） */
+const cfScrim=document.getElementById("cfScrim"),cfDlg=document.getElementById("cfDlg");
+let _cfOnOk=null;
+function confirmDialog(opts){
+  opts=opts||{};
+  document.getElementById("cfTitle").textContent=opts.title||"確認";
+  document.getElementById("cfMsg").textContent=opts.message||"";
+  document.getElementById("cfOk").textContent=opts.okLabel||"OK";
+  _cfOnOk=opts.onOk||null;
+  cfScrim.classList.add("on");
+  cfDlg.classList.add("on");
+  trapFocus(cfDlg,closeConfirm);
+}
+function closeConfirm(){
+  cfScrim.classList.remove("on");
+  cfDlg.classList.remove("on");
+  _cfOnOk=null;
+  releaseFocus();
+}
+document.getElementById("cfOk").addEventListener("click",()=>{const fn=_cfOnOk;closeConfirm();if(fn)fn();});
+document.getElementById("cfCancel").addEventListener("click",closeConfirm);
+cfScrim.addEventListener("click",closeConfirm);
 function doImportAppend(){
   if(!pendingImport)return;
   const {fresh}=pendingImport;
@@ -1230,6 +1285,29 @@ update();
 requestAnimationFrame(()=>{setTrack(TAB_ORDER.indexOf(state.tab),false);fitViewport(false);});
 window.addEventListener("resize",()=>{setTrack(TAB_ORDER.indexOf(state.tab),false);fitViewport(false);});
 window.addEventListener("orientationchange",()=>setTimeout(()=>{setTrack(TAB_ORDER.indexOf(state.tab),false);fitViewport(false);},200));
+
+/* バックアップ保全：データがあるのに長期間.md書き出しをしていなければ、起動時に一度だけ促す */
+(function checkBackupReminder(){
+  if(!DATA.length)return; // データが無ければ不要
+  const SNOOZE="cashfile_backup_snooze_v1";
+  let last=0,snooze=0;
+  try{last=parseInt(localStorage.getItem(BKKEY)||"0",10)||0;}catch(e){}
+  try{snooze=parseInt(localStorage.getItem(SNOOZE)||"0",10)||0;}catch(e){}
+  const ms=7*86400000, now=Date.now();
+  if(last&&now-last<ms)return;          // 直近に書き出し済みなら不要
+  if(snooze&&now-snooze<86400000)return; // 一度促したら24時間は再通知しない
+  setTimeout(()=>{
+    try{localStorage.setItem(SNOOZE,String(now));}catch(e){}
+    confirmDialog({
+      title:"バックアップのおすすめ",
+      message:last
+        ? "前回の書き出しから1週間以上経過しています。データは端末内のみに保存されているため、.mdへの書き出しをおすすめします。"
+        : "データはこの端末内にのみ保存されています。万一に備えて、.mdファイルへ書き出してバックアップしておくと安心です。",
+      okLabel:"今すぐ書き出す",
+      onOk:()=>exportMD()
+    });
+  },1400);
+})();
 </script>
 </body>
 </html>
