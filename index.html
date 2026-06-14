@@ -56,12 +56,28 @@ h1{font-size:clamp(24px,6vw,36px);font-weight:700;letter-spacing:-.02em;margin-t
 .tool:active{transform:scale(.96);color:#fff}
 
 .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
-.seg{display:inline-flex;padding:4px;gap:4px;border-radius:16px}
+.seg{display:inline-flex;padding:4px;gap:4px;border-radius:16px;position:relative}
 .seg button{font-family:inherit;font-size:13px;font-weight:600;padding:8px 15px;border:none;background:transparent;
-  color:var(--txt-dim);cursor:pointer;border-radius:12px;transition:.22s cubic-bezier(.3,.8,.3,1);white-space:nowrap}
-.seg button.on{color:#fff;background:var(--glass-hi);box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 2px 8px rgba(0,0,0,.2)}
+  color:var(--txt-dim);cursor:pointer;border-radius:12px;transition:.22s cubic-bezier(.3,.8,.3,1);white-space:nowrap;position:relative;z-index:1}
+.seg button.on{color:#fff}
 .seg button:active{transform:scale(.95)}
 .seg.dragging button:active{transform:none}
+/* スライド式の選択ピル：指の位置に連続追従（モード/軸/グラフ切替で共通） */
+.segpill{position:absolute;top:4px;left:4px;z-index:0;height:calc(100% - 8px);border-radius:12px;
+  background:var(--glass-hi);box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 2px 8px rgba(0,0,0,.2);
+  transform:translateX(0);will-change:transform;pointer-events:none}
+.segpill.animating{transition:transform .28s cubic-bezier(.3,.8,.3,1),width .28s cubic-bezier(.3,.8,.3,1)}
+/* 選択確定時の“ぽよぽよ”：translateXを保てるよう scale プロパティ側でバウンス */
+.segpill.confirm,.tabpill.confirm{animation:poyo .62s cubic-bezier(.34,1.56,.64,1)}
+@keyframes poyo{
+  0%{scale:1 1}
+  22%{scale:1.11 .8}
+  42%{scale:.93 1.13}
+  60%{scale:1.05 .95}
+  78%{scale:.98 1.03}
+  100%{scale:1 1}
+}
+@media(prefers-reduced-motion:reduce){.segpill.confirm,.tabpill.confirm{animation:none}}
 .spacer{flex:1}
 .selwrap{position:relative;border-radius:16px;overflow:hidden}
 select{font-family:inherit;font-size:13px;font-weight:600;padding:10px 36px 10px 15px;border:none;color:#fff;background:transparent;cursor:pointer;appearance:none;outline:none}
@@ -150,12 +166,18 @@ footer{margin-top:42px;padding:16px 6px 0;border-top:1px solid var(--stroke);fon
   color:var(--txt-dim);transition:background .22s ease,color .22s ease,box-shadow .22s ease,transform .12s ease}
 .tabbtn .ti{font-size:19px;line-height:1;filter:grayscale(.3);opacity:.7;transition:.2s}
 .tabbtn .tl{font-size:11px;font-weight:600;letter-spacing:.02em}
-.tabbtn.on{color:#fff;background:var(--glass-hi);box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 2px 10px rgba(0,0,0,.2)}
+.tabbtn.on{color:#fff}
 .tabbtn.on .ti{filter:none;opacity:1}
 .tabbtn:active{transform:scale(.94)}
+/* スライド式の選択ピル：指の位置に連続追従 */
+.tabpill{position:absolute;top:8px;left:8px;z-index:0;height:calc(100% - 16px - env(safe-area-inset-bottom));
+  border-radius:16px;background:var(--glass-hi);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 2px 10px rgba(0,0,0,.2);
+  transform:translateX(0);will-change:transform;pointer-events:none}
+.tabpill.animating{transition:transform .3s cubic-bezier(.25,.8,.3,1),width .3s cubic-bezier(.25,.8,.3,1)}
 /* なぞり中は各ボタンの押し込み縮小を無効化（通過時のガタつき防止） */
 .tabbar.dragging .tabbtn:active{transform:none}
-.tabbar.dragging .tabbtn{transition:background .18s ease,color .18s ease,box-shadow .18s ease}
+.tabbar.dragging .tabbtn{transition:color .18s ease}
 .tabpanel{animation:fadeIn .28s ease}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 /* カルーセル：3パネル横並び＋ドラッグ追従 */
@@ -287,6 +309,7 @@ footer{margin-top:42px;padding:16px 6px 0;border-top:1px solid var(--stroke);fon
 <!-- 全タブ共通：表示モード切替 -->
 <div class="controls">
   <div class="seg glass" id="modeSeg">
+    <span class="segpill" aria-hidden="true"></span>
     <button data-mode="month" class="on">月別</button>
     <button data-mode="year">年別</button>
     <button data-mode="all">全期間</button>
@@ -339,10 +362,12 @@ footer{margin-top:42px;padding:16px 6px 0;border-top:1px solid var(--stroke);fon
   </div>
   <div class="minirow">
     <div class="seg mini glass" id="axisSeg">
+      <span class="segpill" aria-hidden="true"></span>
       <button data-axis="cat" class="on">費目別</button>
       <button data-axis="means">手段別</button>
     </div>
     <div class="seg mini glass" id="chartSeg">
+      <span class="segpill" aria-hidden="true"></span>
       <button data-chart="bar" class="on">バー</button>
       <button data-chart="donut">円</button>
     </div>
@@ -375,6 +400,7 @@ footer{margin-top:42px;padding:16px 6px 0;border-top:1px solid var(--stroke);fon
 <div class="edge-hint right" id="edgeR"></div>
 
 <nav class="tabbar glass" id="tabbar" aria-label="メイン画面切り替え">
+  <span class="tabpill" id="tabpill" aria-hidden="true"></span>
   <button class="tabbtn on" data-tab="summary"><span class="ti" aria-hidden="true">🏠</span><span class="tl">サマリー</span></button>
   <button class="tabbtn" data-tab="analysis"><span class="ti" aria-hidden="true">📈</span><span class="tl">推移・分析</span></button>
   <button class="tabbtn" data-tab="manage"><span class="ti" aria-hidden="true">📋</span><span class="tl">明細・操作</span></button>
@@ -660,7 +686,7 @@ function renderDonut(cats,total){
   // 凡例/セグメントタップ → バー表示に戻してその費目を開く
   box.querySelectorAll("[data-cat]").forEach(el=>el.addEventListener("click",()=>{
     const cat=el.dataset.cat;state.chart="bar";
-    document.querySelectorAll("#chartSeg button").forEach(b=>b.classList.toggle("on",b.dataset.chart==="bar"));
+    syncSegPills();
     render();
     requestAnimationFrame(()=>{
       const list=document.getElementById("cats-analysis");
@@ -706,7 +732,7 @@ function renderYearSummary(){
   ym.querySelectorAll(".ymrow").forEach(r=>r.addEventListener("click",()=>{
     const m=r.dataset.m;if(!monthsOf().includes(m))return;
     state.mode="month";state.month=m;
-    document.querySelectorAll("#modeSeg button").forEach(b=>b.classList.toggle("on",b.dataset.mode==="month"));
+    syncSegPills();
     document.getElementById("monthSel").value=m;update();
   }));
 }
@@ -769,7 +795,7 @@ function renderTrend(){
     col.innerHTML=`<div class="mbarwrap"><div class="mbar" style="height:${x.total/max*100}%"></div></div>
       <div class="mlbl">${x.m.slice(2).replace("-","/")}</div>${showVal?`<div class="mval tnum">${(x.total/10000).toFixed(0)}万</div>`:""}`;
     col.addEventListener("click",()=>{state.mode="month";state.month=x.m;document.getElementById("monthSel").value=x.m;
-      document.querySelectorAll("#modeSeg button").forEach(b=>b.classList.toggle("on",b.dataset.mode==="month"));update();});
+      syncSegPills();update();});
     t.appendChild(col);
   });
   const avg=mt.length?mt.reduce((s,x)=>s+x.total,0)/mt.length:0;
@@ -778,6 +804,15 @@ function renderTrend(){
 /* タブ切り替え：パネルの表示と、カテゴリ別リスト本体(#cats)のスロット移動 */
 const TAB_ORDER=["summary","analysis","manage"];
 
+/* 選択確定時にピルを“ぽよぽよ”させる（クラス再付与でアニメ再生）。
+   位置スライド(.animating transition)とは独立した scale アニメなので両立する */
+function bounceConfirm(el){
+  if(!el)return;
+  el.classList.remove("confirm");
+  void el.offsetWidth; // リフローでアニメをリセット
+  el.classList.add("confirm");
+}
+
 /* 指のX座標から、最も近いタブを返す（なぞり操作のハイライト用） */
 function nearestTab(clientX){
   const btns=[...document.querySelectorAll("#tabbar .tabbtn")];
@@ -785,6 +820,28 @@ function nearestTab(clientX){
   btns.forEach(b=>{const r=b.getBoundingClientRect();const c=r.left+r.width/2;const d=Math.abs(clientX-c);
     if(d<bestD){bestD=d;best=b.dataset.tab;}});
   return best;
+}
+
+/* スライドピルを連続位置(prog: 0..タブ数-1)へ配置。animate=trueでスナップアニメ */
+function positionTabPill(prog,animate){
+  const bar=document.getElementById("tabbar");
+  const pill=document.getElementById("tabpill");
+  if(!bar||!pill)return;
+  const btns=[...bar.querySelectorAll(".tabbtn")];
+  if(!btns.length)return;
+  const max=btns.length-1;
+  prog=Math.max(0,Math.min(max,prog));
+  const lo=Math.floor(prog),hi=Math.min(max,lo+1),f=prog-lo;
+  const barRect=bar.getBoundingClientRect();
+  const a=btns[lo].getBoundingClientRect(),b=btns[hi].getBoundingClientRect();
+  const left=(a.left-barRect.left)+(b.left-a.left)*f; // 隣のボタンへ線形補間
+  const width=a.width+(b.width-a.width)*f;
+  pill.classList.toggle("animating",!!animate);
+  pill.style.width=width+"px";
+  pill.style.transform="translateX("+left+"px)";
+  // 文字色：最も近いボタンのみ点灯
+  const near=Math.round(prog);
+  btns.forEach((bt,i)=>bt.classList.toggle("on",i===near));
 }
 
 function switchTab(tab,opts){
@@ -797,6 +854,8 @@ function switchTab(tab,opts){
     b.classList.toggle("on",on);
     if(on)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");
   });
+  positionTabPill(TAB_ORDER.indexOf(tab),true); // ピルを該当タブへスナップ
+  if(opts.bounce)bounceConfirm(document.getElementById("tabpill")); // 指を離して確定→ぽよぽよ
   setTrack(TAB_ORDER.indexOf(tab),true); // カルーセルを該当パネルへスライド（アニメ付き）
   if(changed)render();
   requestAnimationFrame(()=>fitViewport(false));
@@ -908,7 +967,7 @@ function saveTxn(){
   if(amt===0){toast("金額に0は入力できません");return;}
   if(!store){toast("店舗・内容を入力してください");return;}
   if(editId){const r=DATA.find(x=>x.id===editId);Object.assign(r,{date,type:formType,store,cat,amt,means});r.id=stableId({date,type:formType,store,cat,amt,means},DATA.filter(x=>x!==r));toast("更新しました");}
-  else{const rec={date,type:formType,store,cat,amt,means};rec.id=stableId(rec,DATA);DATA.push(rec);toast("追加しました");state.month=date.slice(0,7);state.mode="month";document.querySelectorAll("#modeSeg button").forEach(b=>b.classList.toggle("on",b.dataset.mode==="month"));}
+  else{const rec={date,type:formType,store,cat,amt,means};rec.id=stableId(rec,DATA);DATA.push(rec);toast("追加しました");state.month=date.slice(0,7);state.mode="month";syncSegPills();}
   save();closeSheet();update();
 }
 function delTxn(){
@@ -1048,60 +1107,110 @@ let toastT;function toast(msg){const el=document.getElementById("toast");el.text
 
 /* events */
 const MODE_ORDER=["month","year","all"];
+/* 各セグの選択ピルを現在のstate値へ合わせ直す（DOMを都度参照する自己完結版。
+   state.mode/axis/chart を直接書き換えた箇所から呼ぶ） */
+function syncSegPills(animate){
+  const map=[["modeSeg","mode",state.mode],["axisSeg","axis",state.axis],["chartSeg","chart",state.chart]];
+  map.forEach(([id,key,cur])=>{
+    const seg=document.getElementById(id);if(!seg)return;
+    const pill=seg.querySelector(".segpill");const btns=[...seg.querySelectorAll("button")];
+    if(!btns.length)return;
+    let i=btns.findIndex(b=>b.dataset[key]===cur);if(i<0)i=0;
+    btns.forEach((b,bi)=>b.classList.toggle("on",bi===i));
+    if(!pill)return;
+    const segRect=seg.getBoundingClientRect();const r=btns[i].getBoundingClientRect();
+    pill.classList.toggle("animating",animate!==false);
+    pill.style.width=r.width+"px";
+    pill.style.transform="translateX("+(r.left-segRect.left)+"px)";
+  });
+}
 function setMode(mode){
   if(!MODE_ORDER.includes(mode)||mode===state.mode)return;
   state.mode=mode;
-  document.querySelectorAll("#modeSeg button").forEach(x=>x.classList.toggle("on",x.dataset.mode===mode));
+  syncSegPills();
   update();
 }
-document.querySelectorAll("#modeSeg button").forEach(b=>b.addEventListener("click",()=>{
-  if(suppressModeClick){suppressModeClick=false;return;}
-  setMode(b.dataset.mode);
-}));
-
-/* 月別/年別/全期間セグmeを指でなぞって切替（下部タブと同じロジック：
-   なぞり中はハイライトのみ動かし、離したとき1回だけ確定） */
-let suppressModeClick=false;
-(function setupModeDrag(){
-  const seg=document.getElementById("modeSeg");
+/* セグメント共通：指でなぞって切替（下部タブと同じスライドピル方式）。
+   なぞり中はピルが指へ連続追従、離したとき1回だけ確定。
+   key   : data-* 属性名（"mode" / "axis" / "chart"）
+   apply : 確定時に呼ぶ関数（state更新＋再描画）
+   返り値: そのセグの再配置関数（リサイズ時に外から呼ぶ用） */
+function setupSegDrag(segId,key,getCur,apply){
+  const seg=document.getElementById(segId);
+  if(!seg)return ()=>{};
+  const pill=seg.querySelector(".segpill");
   const btns=[...seg.querySelectorAll("button")];
-  let dragging=false,pendingMode=null;
-  function nearest(clientX){
-    let best=null,bestD=Infinity;
-    btns.forEach(b=>{const r=b.getBoundingClientRect();const c=r.left+r.width/2;const d=Math.abs(clientX-c);
-      if(d<bestD){bestD=d;best=b.dataset.mode;}});
-    return best;
+  const val=b=>b.dataset[key];
+  const curIdx=()=>Math.max(0,btns.findIndex(b=>val(b)===getCur()));
+  let dragging=false,pendingIdx=null,suppressClick=false;
+  // 連続進捗(0..n-1)へピルを配置。文字色は最も近いボタンのみ点灯
+  function positionPill(prog,animate){
+    if(!pill||!btns.length)return;
+    const max=btns.length-1;
+    prog=Math.max(0,Math.min(max,prog));
+    const lo=Math.floor(prog),hi=Math.min(max,lo+1),f=prog-lo;
+    const segRect=seg.getBoundingClientRect();
+    const a=btns[lo].getBoundingClientRect(),b=btns[hi].getBoundingClientRect();
+    const left=(a.left-segRect.left)+(b.left-a.left)*f;
+    const width=a.width+(b.width-a.width)*f;
+    pill.classList.toggle("animating",!!animate);
+    pill.style.width=width+"px";
+    pill.style.transform="translateX("+left+"px)";
+    const near=Math.round(prog);
+    btns.forEach((bt,i)=>bt.classList.toggle("on",i===near));
+  }
+  // 指のX→連続進捗
+  function progFromX(x){
+    const centers=btns.map(b=>{const r=b.getBoundingClientRect();return r.left+r.width/2;});
+    if(x<=centers[0])return 0;
+    if(x>=centers[centers.length-1])return centers.length-1;
+    for(let i=0;i<centers.length-1;i++){
+      if(x>=centers[i]&&x<=centers[i+1])return i+(x-centers[i])/(centers[i+1]-centers[i]);
+    }
+    return 0;
   }
   function track(x){
-    const mode=nearest(x);
-    if(mode&&mode!==pendingMode){
-      pendingMode=mode;
-      btns.forEach(b=>b.classList.toggle("on",b.dataset.mode===mode));
-    }
+    const prog=progFromX(x);
+    positionPill(prog,false); // 指に連続追従
+    pendingIdx=Math.round(prog);
   }
   function commit(){
+    if(!dragging)return;
     dragging=false;seg.classList.remove("dragging");
-    if(pendingMode&&pendingMode!==state.mode){suppressModeClick=true;setMode(pendingMode);}
-    else{btns.forEach(b=>b.classList.toggle("on",b.dataset.mode===state.mode));}
-    pendingMode=null;
+    if(pendingIdx!=null&&val(btns[pendingIdx])!==getCur()){suppressClick=true;apply(val(btns[pendingIdx]));}
+    else{positionPill(curIdx(),true);}
+    bounceConfirm(pill); // 指を離して確定→ぽよぽよ
+    pendingIdx=null;
   }
-  function cancel(){dragging=false;seg.classList.remove("dragging");pendingMode=null;
-    btns.forEach(b=>b.classList.toggle("on",b.dataset.mode===state.mode));}
+  function cancel(){dragging=false;seg.classList.remove("dragging");pendingIdx=null;positionPill(curIdx(),true);}
   seg.addEventListener("touchstart",e=>{
     if(e.touches.length!==1)return;
-    dragging=true;pendingMode=null;seg.classList.add("dragging");track(e.touches[0].clientX);
+    dragging=true;pendingIdx=null;seg.classList.add("dragging");track(e.touches[0].clientX);
   },{passive:true});
   seg.addEventListener("touchmove",e=>{
     if(!dragging)return;e.preventDefault();track(e.touches[0].clientX);
   },{passive:false});
   seg.addEventListener("touchend",commit,{passive:true});
   seg.addEventListener("touchcancel",cancel,{passive:true});
-  seg.addEventListener("mousedown",e=>{dragging=true;pendingMode=null;seg.classList.add("dragging");track(e.clientX);});
+  seg.addEventListener("mousedown",e=>{dragging=true;pendingIdx=null;seg.classList.add("dragging");track(e.clientX);});
   window.addEventListener("mousemove",e=>{if(dragging)track(e.clientX);});
   window.addEventListener("mouseup",()=>{if(dragging)commit();});
-})();
-document.querySelectorAll("#axisSeg button").forEach(b=>b.addEventListener("click",()=>{state.axis=b.dataset.axis;document.querySelectorAll("#axisSeg button").forEach(x=>x.classList.toggle("on",x===b));render();}));
-document.querySelectorAll("#chartSeg button").forEach(b=>b.addEventListener("click",()=>{state.chart=b.dataset.chart;document.querySelectorAll("#chartSeg button").forEach(x=>x.classList.toggle("on",x===b));render();}));
+  // クリック時：直前がなぞり確定なら1回無視
+  btns.forEach(b=>b.addEventListener("click",()=>{
+    if(suppressClick){suppressClick=false;return;}
+    apply(val(b));
+    positionPill(curIdx(),true); // クリック選択時もピルをスナップ移動
+    bounceConfirm(pill); // タップ確定→ぽよぽよ
+  }));
+  // 外部（apply後/リサイズ）から現在値へピルを合わせ直す
+  const reposition=animate=>positionPill(curIdx(),animate);
+  reposition(false); // 初期配置
+  return reposition;
+}
+
+setupSegDrag("modeSeg","mode",()=>state.mode,m=>setMode(m));
+setupSegDrag("axisSeg","axis",()=>state.axis,a=>{state.axis=a;render();});
+setupSegDrag("chartSeg","chart",()=>state.chart,c=>{state.chart=c;render();});
 document.getElementById("monthSel").addEventListener("change",e=>{state.month=e.target.value;update();});
 document.getElementById("yearSel").addEventListener("change",e=>{state.year=e.target.value;update();});
 const searchEl=document.getElementById("search"),searchClearEl=document.getElementById("searchClear");
@@ -1123,7 +1232,7 @@ document.getElementById("impCancel").addEventListener("click",closeImport);
 impScrim.addEventListener("click",closeImport);
 document.querySelectorAll("#tabbar .tabbtn").forEach(b=>b.addEventListener("click",e=>{
   if(suppressTabClick){suppressTabClick=false;return;} // なぞり操作直後のclickは無視
-  switchTab(b.dataset.tab);
+  switchTab(b.dataset.tab,{bounce:true});
 }));
 
 /* カテゴリ別リストのクリック処理（3パネル分をtrackで一括委譲） */
@@ -1147,21 +1256,31 @@ let suppressTabClick=false;
   const bar=document.getElementById("tabbar");
   const btns=[...bar.querySelectorAll(".tabbtn")];
   let dragging=false,pendingTab=null;
-  function track(x){
-    const tab=nearestTab(x);
-    if(tab&&tab!==pendingTab){
-      pendingTab=tab;
-      btns.forEach(b=>b.classList.toggle("on",b.dataset.tab===tab));
+  // 指のX座標を連続進捗(0..タブ数-1)へ換算
+  function progFromX(x){
+    const centers=btns.map(b=>{const r=b.getBoundingClientRect();return r.left+r.width/2;});
+    if(x<=centers[0])return 0;
+    if(x>=centers[centers.length-1])return centers.length-1;
+    for(let i=0;i<centers.length-1;i++){
+      if(x>=centers[i]&&x<=centers[i+1]){
+        return i+(x-centers[i])/(centers[i+1]-centers[i]);
+      }
     }
+    return 0;
+  }
+  function track(x){
+    const prog=progFromX(x);
+    positionTabPill(prog,false); // ピルを指に連続追従
+    pendingTab=nearestTab(x);
   }
   function commit(){
     dragging=false;bar.classList.remove("dragging");
-    if(pendingTab&&pendingTab!==state.tab){suppressTabClick=true;switchTab(pendingTab,{scroll:false});}
-    else{btns.forEach(b=>b.classList.toggle("on",b.dataset.tab===state.tab));}
+    if(pendingTab&&pendingTab!==state.tab){suppressTabClick=true;switchTab(pendingTab,{scroll:false,bounce:true});}
+    else{positionTabPill(TAB_ORDER.indexOf(state.tab),true);}
     pendingTab=null;
   }
   function cancel(){dragging=false;bar.classList.remove("dragging");pendingTab=null;
-    btns.forEach(b=>b.classList.toggle("on",b.dataset.tab===state.tab));}
+    positionTabPill(TAB_ORDER.indexOf(state.tab),true);}
   bar.addEventListener("touchstart",e=>{
     if(e.touches.length!==1)return;
     dragging=true;pendingTab=null;bar.classList.add("dragging");track(e.touches[0].clientX);
@@ -1186,10 +1305,17 @@ let suppressTabClick=false;
   const LOCK=8;
   const isInteractive=el=>el.closest&&el.closest("input,select,textarea,button,.trend,.donut-wrap,.ymonths,.sheet,.impdlg,.tabbar");
   const idx=()=>TAB_ORDER.indexOf(state.tab);
+  // 指の横移動に合わせて選択ピルを連続追従させる
+  function highlightByProgress(i,move){
+    let p=i-(move/W); // 左へドラッグ(move<0)で進捗増→次タブへ
+    positionTabPill(p,false);
+  }
+  function resetHighlight(){positionTabPill(idx(),true);}
 
   function reset(){
     area.classList.remove("dragging");
     setTrack(idx(),true);
+    resetHighlight();
     requestAnimationFrame(()=>fitViewport(false));
     x0=null;axis=null;edgeL.classList.remove("on");edgeR.classList.remove("on");
   }
@@ -1215,6 +1341,7 @@ let suppressTabClick=false;
     const i=idx();
     if((i===0&&dx>0)||(i===TAB_ORDER.length-1&&dx<0))move=dx*0.32;
     setTrack(baseX+move,false,true); // px指定でtrackを指追従
+    highlightByProgress(i,move); // 下部タブのハイライトも指に追従
     edgeR.classList.toggle("on",dx<0&&i<TAB_ORDER.length-1);
     edgeL.classList.toggle("on",dx>0&&i>0);
   },{passive:false});
@@ -1231,9 +1358,10 @@ let suppressTabClick=false;
     const i=idx();
     const target=i+dir;
     if((Math.abs(dx)>thresh||fast)&&target>=0&&target<TAB_ORDER.length){
-      switchTab(TAB_ORDER[target],{scroll:false}); // 該当タブへスナップ＋枠移動
+      switchTab(TAB_ORDER[target],{scroll:false,bounce:true}); // 該当タブへスナップ＋枠移動
     }else{
       setTrack(i,true); // 元位置へ戻す
+      resetHighlight(); // ハイライトも現タブへ戻す
       requestAnimationFrame(()=>fitViewport(false));
     }
     x0=null;axis=null;
@@ -1291,9 +1419,9 @@ switchTab("summary");
 setTrack(0,false); // 初回はアニメ無しで配置
 update();
 // 枠・トラック・高さの初期化＋リサイズ/回転に追従
-requestAnimationFrame(()=>{setTrack(TAB_ORDER.indexOf(state.tab),false);fitViewport(false);});
-window.addEventListener("resize",()=>{setTrack(TAB_ORDER.indexOf(state.tab),false);fitViewport(false);});
-window.addEventListener("orientationchange",()=>setTimeout(()=>{setTrack(TAB_ORDER.indexOf(state.tab),false);fitViewport(false);},200));
+requestAnimationFrame(()=>{setTrack(TAB_ORDER.indexOf(state.tab),false);positionTabPill(TAB_ORDER.indexOf(state.tab),false);syncSegPills(false);fitViewport(false);});
+window.addEventListener("resize",()=>{setTrack(TAB_ORDER.indexOf(state.tab),false);positionTabPill(TAB_ORDER.indexOf(state.tab),false);syncSegPills(false);fitViewport(false);});
+window.addEventListener("orientationchange",()=>setTimeout(()=>{setTrack(TAB_ORDER.indexOf(state.tab),false);positionTabPill(TAB_ORDER.indexOf(state.tab),false);syncSegPills(false);fitViewport(false);},200));
 
 /* バックアップ保全：データがあるのに長期間.md書き出しをしていなければ、起動時に一度だけ促す */
 (function checkBackupReminder(){
