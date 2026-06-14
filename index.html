@@ -467,9 +467,9 @@ footer{margin-top:42px;padding:16px 6px 0;border-top:1px solid var(--stroke);fon
 
   <div id="aiSetup">
     <button class="btn ghost" id="aiPickFile" style="width:100%;margin-bottom:12px">📄 PDFファイルを選択</button>
-    <input type="file" id="aiFileInput" accept=".pdf,application/pdf" style="display:none">
+    <input type="file" id="aiFileInput" accept=".pdf,application/pdf,image/*" style="display:none">
     <div class="field"><label>読み取り内容（貼り付け・編集も可）</label>
-      <textarea id="aiInput" rows="7" placeholder="例：&#10;2025/05/10 セブンイレブン 540円&#10;2025/05/11 JR東日本 660円&#10;2025/05/12 Amazon 3,200円&#10;&#10;またはPDFを選択すると内容がここに読み込まれます"></textarea>
+      <textarea id="aiInput" rows="7" placeholder="例：&#10;2025/05/10 セブンイレブン 540円&#10;2025/05/11 JR東日本 660円&#10;2025/05/12 Amazon 3,200円&#10;&#10;またはPDF・画像（PNG/JPG）を選択すると内容がここに読み込まれます"></textarea>
     </div>
     <div class="ai-status" id="aiStatus"></div>
     <div class="ai-progress" id="aiProgress"><div class="ai-progress-bar" id="aiProgressBar"></div></div>
@@ -1073,21 +1073,81 @@ async function extractPDF(file){
   }
   return out.trim();
 }
+/* Tesseract.js（OCR）ワーカー。jpn＋engで日本語・英数字を読む */
+let _ocrWorker=null;
+async function loadOCR(){
+  if(_ocrWorker)return _ocrWorker;
+  aiStatus("OCRエンジンを準備中…（初回のみ読み込みに時間がかかります）");
+  const T=await import("https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.esm.min.js");
+  const create=T.createWorker||(T.default&&T.default.createWorker);
+  const worker=await create("jpn+eng",1,{
+    logger:m=>{if(m.status==="recognizing text")aiProgress(m.progress);}
+  });
+  _ocrWorker=worker;return worker;
+}
+/* 画像（PNG/JPG）をOCR */
+async function ocrImage(src){
+  const worker=await loadOCR();
+  aiStatus("画像から文字を読み取り中…");
+  aiProgress(0);
+  const{data}=await worker.recognize(src);
+  aiProgress(null);
+  return(data&&data.text?data.text:"").trim();
+}
+/* 画像化PDF：各ページをcanvasにレンダリングしてからOCR */
+async function ocrPDF(file){
+  const lib=await loadPdfLib();
+  const worker=await loadOCR();
+  const data=await file.arrayBuffer();
+  const pdf=await lib.getDocument({data}).promise;
+  let out="";
+  for(let p=1;p<=pdf.numPages;p++){
+    aiStatus(`PDFをOCR中… ${p}/${pdf.numPages}ページ`);
+    aiProgress(0);
+    const page=await pdf.getPage(p);
+    const viewport=page.getViewport({scale:2.0}); // OCR精度のため拡大
+    const canvas=document.createElement("canvas");
+    canvas.width=viewport.width;canvas.height=viewport.height;
+    const ctx=canvas.getContext("2d");
+    await page.render({canvasContext:ctx,viewport}).promise;
+    const{data:res}=await worker.recognize(canvas);
+    out+=(res&&res.text?res.text:"")+"\n";
+    canvas.width=canvas.height=0; // メモリ解放
+  }
+  aiProgress(null);
+  return out.trim();
+}
 async function onAIFile(file){
   if(!file)return;
   const input=document.getElementById("aiInput");
-  if(file.type==="application/pdf"||/\.pdf$/i.test(file.name)){
-    try{
+  const isPDF=file.type==="application/pdf"||/\.pdf$/i.test(file.name);
+  const isImage=(file.type&&file.type.startsWith("image/"))||/\.(png|jpe?g|webp|bmp|gif)$/i.test(file.name);
+  try{
+    if(isPDF){
       aiStatus("PDFから文字を抽出中…");
-      const text=await extractPDF(file);
-      if(!text){aiStatus("このPDFからは文字を取り出せませんでした。スキャン画像のPDFの可能性があります。");return;}
+      let text="";
+      try{text=await extractPDF(file);}catch(_){text="";}
+      if(!text){
+        aiStatus("文字が埋め込まれていないPDFのため、OCRで読み取ります…");
+        text=await ocrPDF(file);
+      }
+      if(!text){aiStatus("このPDFからは文字を取り出せませんでした。");return;}
       input.value=text;
       aiStatus("PDFを読み込みました。内容を確認して『解析する』を押してください。");
-    }catch(e){
-      aiStatus("PDFの読み込みに失敗しました："+(e&&e.message?e.message:"不明なエラー"));
+    }else if(isImage){
+      const url=URL.createObjectURL(file);
+      try{
+        const text=await ocrImage(url);
+        if(!text){aiStatus("画像から文字を読み取れませんでした。鮮明な画像で再度お試しください。");return;}
+        input.value=text;
+        aiStatus("画像を読み込みました。内容を確認して『解析する』を押してください。");
+      }finally{URL.revokeObjectURL(url);}
+    }else{
+      aiStatus("PDFまたは画像ファイルを選択してください。");
     }
-  }else{
-    aiStatus("PDFファイルを選択してください。");
+  }catch(e){
+    aiProgress(null);
+    aiStatus("読み込みに失敗しました："+(e&&e.message?e.message:"不明なエラー"));
   }
 }
 function aiStatus(msg){const el=document.getElementById("aiStatus");if(el)el.textContent=msg||"";}
